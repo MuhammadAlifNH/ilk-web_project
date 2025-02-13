@@ -26,6 +26,13 @@ class User extends Authenticatable
         'phone',
     ];
 
+    public function getProfilePhotoUrlAttribute()
+    {
+        return $this->profile_photo_path
+            ? asset('storage/' . $this->profile_photo_path)
+            : asset('images/profile-placeholder.png');
+    }
+
     /**
      * The attributes that should be hidden for serialization.
      *

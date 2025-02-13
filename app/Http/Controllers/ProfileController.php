@@ -26,55 +26,69 @@ class ProfileController extends Controller
      */
     public function update(Request $request): RedirectResponse
     {
-        // Validasi input termasuk field phone
+        // Validasi input termasuk field image (foto profil), name, email, phone, role, dan admin_code
         $data = $request->validate([
+            'image' => ['nullable', 'image', 'max:2048'], // Maksimal 2MB
             'name'  => ['required', 'string', 'max:255'],
             'email' => ['required', 'string', 'email', 'max:255'],
-            'phone' => ['nullable', 'regex:/^[0-9]+$/', 'max:13'], // Validasi field phone
-            'role' => ['required', 'string', Rule::in(['admin', 'laboran', 'teknisi', 'pengguna'])],
+            'phone' => ['nullable', 'regex:/^[0-9]+$/', 'max:13'],
+            'role'  => ['required', 'string', Rule::in(['admin', 'laboran', 'teknisi', 'pengguna'])],
             'admin_code' => ['nullable', 'string'],
+            // Pastikan field verification_code ada jika diperlukan
         ]);
-
-        // Validasi kode admin
+    
+        // Validasi kode verifikasi berdasarkan role
         if ($request->role === 'admin') {
-            $adminCode = env('ADMIN_VERIFICATION_CODE', '123abc'); // Simpan kode di .env
+            $adminCode = env('ADMIN_VERIFICATION_CODE', '123abc');
             if ($request->verification_code !== $adminCode) {
                 return back()->withErrors(['admin_code' => 'Kode verifikasi salah.']);
             }
-        }
-        elseif ($request->role === 'laboran') {
-            $laboranCode = env('LABORAN_VERIFICATION_CODE', '456def'); // Simpan kode di .env
+        } elseif ($request->role === 'laboran') {
+            $laboranCode = env('LABORAN_VERIFICATION_CODE', '456def');
             if ($request->verification_code !== $laboranCode) {
                 return back()->withErrors(['laboran_code' => 'Kode verifikasi salah.']);
             }
-        }
-        elseif ($request->role === 'teknisi') {
-            $teknisiCode = env('TEKNISI_VERIFICATION_CODE', '789ghi'); // Simpan kode di .env
+        } elseif ($request->role === 'teknisi') {
+            $teknisiCode = env('TEKNISI_VERIFICATION_CODE', '789ghi');
             if ($request->verification_code !== $teknisiCode) {
                 return back()->withErrors(['teknisi_code' => 'Kode verifikasi salah.']);
             }
         }
-        
+    
         $user = $request->user();
-
-        $user->update([
-            'name' => $request->name,
-            'email' => $request->email,
-            'phone' => $request->phone,
-            'role' => $request->role,
-        ]);
-
+        $oldEmail = $user->email;
+    
+        // Tangani upload atau penghapusan foto profil
+        if ($request->hasFile('image')) {
+            // Hapus foto lama jika ada
+            if ($user->image) {
+                \Illuminate\Support\Facades\Storage::disk('public')->delete($user->image);
+            }
+            // Simpan foto baru di folder 'images' pada disk 'public'
+            $data['image'] = $request->file('image')->store('images', 'public');
+        } elseif ($request->filled('remove_image')) {
+            // Jika terdapat input untuk menghapus foto
+            if ($user->image) {
+                \Illuminate\Support\Facades\Storage::disk('public')->delete($user->image);
+            }
+            $data['image'] = null;
+        } else {
+            // Jika tidak ada perubahan pada foto, pertahankan nilai lama
+            $data['image'] = $user->image;
+        }
+    
         // Jika email berubah, reset verifikasi email
-        if ($user->email !== $data['email']) {
+        if ($oldEmail !== $data['email']) {
             $user->email_verified_at = null;
         }
-
-        // Isi data pengguna dengan data yang telah divalidasi (termasuk phone)
+    
+        // Perbarui data user dengan data yang telah divalidasi
         $user->fill($data);
         $user->save();
-
+    
         return Redirect::route('profile.edit')->with('status', 'profile-updated');
     }
+    
 
     /**
      * Hapus akun pengguna.
